@@ -12,6 +12,7 @@ import argparse
 import cv2
 import pygame
 import time
+import platform
 from scipy.spatial import distance as dist
 import os
 import numpy as np
@@ -39,10 +40,15 @@ def play_warning_sounds(*sound_paths):
         global alarm_playing
         try:
             for sound_path in sound_paths:
-                pygame.mixer.music.load(sound_path)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
+                if platform.system() == "Linux":
+                    # Use native mpg123 player on Raspberry Pi
+                    os.system(f"mpg123 -q '{sound_path}'")
+                else:
+                    # Use Pygame on Windows
+                    pygame.mixer.music.load(sound_path)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        time.sleep(0.1)
         finally:
             alarm_playing = False
 

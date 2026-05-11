@@ -15,6 +15,7 @@ import pandas as pd
 import csv
 import pygame
 import threading
+import platform
 from scipy.spatial import distance as dist
 import os 
 from datetime import datetime
@@ -37,10 +38,13 @@ def play_warning_sounds(*sound_paths):
         global alarm_playing
         try:
             for sound_path in sound_paths:
-                pygame.mixer.music.load(sound_path)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
+                if platform.system() == "Linux":
+                    os.system(f"mpg123 -q '{sound_path}'")
+                else:
+                    pygame.mixer.music.load(sound_path)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        time.sleep(0.1)
         finally:
             alarm_playing = False
     alarm_playing = True
