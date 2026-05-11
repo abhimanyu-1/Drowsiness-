@@ -29,7 +29,8 @@ def assure_path_exists(path):
     if not os.path.exists(dir):
         os.makedirs(dir)
 
-#all eye  and mouth aspect ratio with time
+# Fix for Raspberry Pi Pygame audio silences
+pygame.mixer.pre_init(44100, -16, 2, 4096)
 pygame.mixer.init()
 alarm_playing = False
 
@@ -41,13 +42,10 @@ def play_warning_sounds(*sound_paths):
         global alarm_playing
         try:
             for sound_path in sound_paths:
-                if platform.system() == "Linux":
-                    os.system(f"mpg123 -q '{sound_path}'")
-                else:
-                    pygame.mixer.music.load(sound_path)
-                    pygame.mixer.music.play()
-                    while pygame.mixer.music.get_busy():
-                        time.sleep(0.1)
+                pygame.mixer.music.load(sound_path)
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
         finally:
             alarm_playing = False
     alarm_playing = True
@@ -175,7 +173,7 @@ while True:
 				count_sleep += 1
 				# Add the frame to the dataset ar a proof of drowsy driving
 				cv2.imwrite("dataset_phonecam/frame_sleep%d.jpg" % count_sleep, frame)
-				play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.mp3')
+				play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.wav')
 				cv2.putText(frame, "DROWSINESS ALERT!", (40, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 		else: 				
 			FRAME_COUNT = 0
@@ -232,7 +230,7 @@ while True:
 				mobile_usage_count += 1
                 # Add the frame to the dataset ar a proof of mobile usage
 				cv2.imwrite("dataset_phonecam/frame_mobile_usage%d.jpg" % mobile_usage_count, frame)
-				play_warning_sounds('sound files/mobwarn.mp3')
+				play_warning_sounds('sound files/Mobwarn.mp3')
 
 	#total data collection for plotting	
 	for i in ear_list:

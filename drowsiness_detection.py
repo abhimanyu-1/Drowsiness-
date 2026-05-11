@@ -161,7 +161,7 @@ while True:
 
                 cv2.putText(frame, "DROWSINESS ALERT! (EYES CLOSED)", (40, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 cv2.imwrite("dataset/frame_sleep%d.jpg" % count_sleep, frame)
-                play_warning_sounds('sound files/alarm.wav', 'sound files/warning.wav')
+                play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.wav')
                 print("[INFO] Drowsiness detected. Waiting for driver response.")
                 alarm_started = True
                 response_count = 0
@@ -192,7 +192,7 @@ while True:
             cv2.drawContours(frame, [mouth], -1, (0, 0, 255), 1)
             cv2.putText(frame, "DROWSINESS ALERT! (YAWN)", (60, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.imwrite("dataset/frame_yawn%d.jpg" % count_yawn, frame)
-            play_warning_sounds('sound files/alarm.wav', 'sound files/warning_yawn.wav')
+            play_warning_sounds('sound files/alarm.mp3', 'sound files/warning_yawn.mp3')
 
     # --- CELL PHONE DETECTION ---
     height, width, _ = frame.shape
@@ -235,7 +235,7 @@ while True:
                 mobile_usage_count += 1
 
                 cv2.imwrite("dataset/frame_mobile_usage%d.jpg" % mobile_usage_count, frame)
-                play_warning_sounds('sound files/mobwarn.wav')
+                play_warning_sounds('sound files/Mobwarn.mp3')
 
     cv2.imshow("Output", frame)
     key = cv2.waitKey(1) & 0xFF
