@@ -1,57 +1,35 @@
-import serial
-import time
-import serial.tools.list_ports
+import pygame
 
-def find_arduino_port():
-    # This function lists all connected USB devices
-    ports = list(serial.tools.list_ports.comports())
+def test_audio_file(filename):
+    print(f"Initializing Pygame mixer...")
     
-    print("\n--- Scanning for Ports ---")
-    if not ports:
-        print("[ERROR] No USB devices found! Check your cable.")
-        return None
-    
-    for p in ports:
-        print(f"Found Device: {p.device} - {p.description}")
-        
-    # Ask user to pick one if multiple are found, or confirm the single one
-    target_port = input("\nEnter the COM port to test (e.g., COM3): ").strip().upper()
-    return target_port
+    # Pre-init helps prevent audio stuttering/failure on Raspberry Pi
+    pygame.mixer.pre_init(44100, -16, 2, 2048) 
+    pygame.mixer.init()
 
-def test_connection():
-    port = find_arduino_port()
-    if not port:
-        return
-
-    print(f"\n[INFO] Attempting to connect to {port} at 115200 baud...")
-    
+    print(f"Loading '{filename}'...")
     try:
-        # Establish connection
-        arduino = serial.Serial(port, 115200, timeout=1)
-        time.sleep(3) # WAIT for the board to reset (Crucial for ESP32/Arduino)
-        print("[SUCCESS] Connected! Starting Signal Test...\n")
+        pygame.mixer.music.load(filename)
+        
+        print("Playing audio... (Press Ctrl+C to stop)")
+        pygame.mixer.music.play()
+        
+        # This loop keeps the Python script running as long as the audio is playing.
+        # Without this, the script ends instantly and cuts off the sound!
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+            
+        print("Playback finished!")
 
-        print("Test 1: Sending 'S' (DANGER Signal)")
-        print("--> Watch your Hardware: Buzzer SHOULD Beep, Screen 'DONT SLEEP'")
-        arduino.write(b'S')
-        
-        time.sleep(5) # Wait 5 seconds to let you see/hear it
-        
-        print("\nTest 2: Sending 'O' (SAFE Signal)")
-        print("--> Watch your Hardware: Buzzer SHOULD Stop, Screen 'VEHICLE READY'")
-        arduino.write(b'O')
-        
-        time.sleep(2)
-        
-        print("\n[DONE] Test Finished. Closing connection.")
-        arduino.close()
-
-    except serial.SerialException as e:
-        print(f"\n[CRITICAL ERROR] Could not open {port}.")
-        print("Possible causes:")
-        print("1. The Arduino IDE Serial Monitor is OPEN. Close it!")
-        print("2. You selected the wrong COM port.")
-        print(f"Error details: {e}")
+    except pygame.error as e:
+        print(f"\n[ERROR] Pygame could not load/play the file.")
+        print(f"Details: {e}")
+        print("Check if the file path is correct and the file isn't corrupted.")
 
 if __name__ == "__main__":
-    test_connection()
+    # Replace 'alert.wav' with your actual audio file's name
+    # If the file is in a different folder, use the full path like:
+    # '/home/iotlab/Desktop/DMS/Driver-Monitoring System/alert.wav'
+    AUDIO_FILE = r"sound files/alarm.wav" 
+    
+    test_audio_file(AUDIO_FILE)
