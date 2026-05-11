@@ -11,12 +11,12 @@ import dlib
 import time
 import argparse
 import cv2
-from playsound import playsound
+import pygame
+import time
 from scipy.spatial import distance as dist
 import os
 import numpy as np
 import pandas as pd
-import serial
 import threading
 
 style.use('fivethirtyeight')
@@ -28,6 +28,8 @@ def assure_path_exists(path):
         os.makedirs(dir)
 
 
+pygame.mixer.init()
+
 def play_warning_sounds(*sound_paths):
     global alarm_playing
 
@@ -36,10 +38,12 @@ def play_warning_sounds(*sound_paths):
 
     def play_all():
         global alarm_playing
-
         try:
             for sound_path in sound_paths:
-                playsound(sound_path)
+                pygame.mixer.music.load(sound_path)
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
         finally:
             alarm_playing = False
 
@@ -82,17 +86,6 @@ print("[INFO] Loading Camera.....")
 vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
 time.sleep(2)
 
-# --- HARDWARE CONNECTION ---
-try:
-    # Check your COM port in Device Manager -> Ports.
-    arduino = serial.Serial('COM7', 115200, timeout=1)
-    time.sleep(2)
-    print("[INFO] Hardware Connected!")
-except:
-    print("[WARN] Hardware NOT connected. Running in simulation mode.")
-    arduino = None
-# ---------------------------
-
 assure_path_exists("dataset/")
 count_sleep = 0
 count_yawn = 0
@@ -116,7 +109,9 @@ while True:
     cv2.putText(frame, "PRESS 'Q' TO EXIT", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 3)
     frame = imutils.resize(frame, width=450)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    rects = detector(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    print("DEBUG FRAME:", type(rgb), rgb.shape, rgb.dtype)
+    rects = detector(rgb, 1)
 
     for (i, rect) in enumerate(rects):
         shape = predictor(gray, rect)
@@ -154,9 +149,6 @@ while True:
             if FRAME_COUNT >= CONSECUTIVE_FRAMES and not alarm_started:
                 count_sleep += 1
 
-                if arduino:
-                    arduino.write(b'S')
-
                 cv2.putText(frame, "DROWSINESS ALERT! (EYES CLOSED)", (40, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 cv2.imwrite("dataset/frame_sleep%d.jpg" % count_sleep, frame)
                 play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.mp3')
@@ -174,9 +166,6 @@ while True:
                     print("[EMERGENCY] Slowing vehicle...")
                     print("[EMERGENCY] Stopping vehicle...")
 
-                    if arduino:
-                        arduino.write(b'U')
-
                 if unconscious_detected:
                     cv2.putText(frame, "UNCONSCIOUS DRIVER!", (55, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 3)
 
@@ -185,16 +174,10 @@ while True:
             response_count = 0
             alarm_started = False
             unconscious_detected = False
-            # Send 'O' only if not sleeping (we will check phone later)
-            if arduino:
-                arduino.write(b'O')
 
         # --- YAWN CHECK ---
         if MAR > MAR_THRESHOLD:
             count_yawn += 1
-
-            if arduino:
-                arduino.write(b'S')
 
             cv2.drawContours(frame, [mouth], -1, (0, 0, 255), 1)
             cv2.putText(frame, "DROWSINESS ALERT! (YAWN)", (60, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
@@ -240,9 +223,6 @@ while True:
 
             if label == "cell phone":
                 mobile_usage_count += 1
-
-                if arduino:
-                    arduino.write(b'P')
 
                 cv2.imwrite("dataset/frame_mobile_usage%d.jpg" % mobile_usage_count, frame)
                 play_warning_sounds('sound files/mobwarn.mp3')

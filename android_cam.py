@@ -14,7 +14,8 @@ import argparse
 import cv2 
 import pandas as pd
 import csv
-from playsound import playsound
+import pygame
+import threading
 from scipy.spatial import distance as dist
 import os 
 from datetime import datetime
@@ -26,6 +27,26 @@ def assure_path_exists(path):
         os.makedirs(dir)
 
 #all eye  and mouth aspect ratio with time
+pygame.mixer.init()
+alarm_playing = False
+
+def play_warning_sounds(*sound_paths):
+    global alarm_playing
+    if alarm_playing:
+        return
+    def play_all():
+        global alarm_playing
+        try:
+            for sound_path in sound_paths:
+                pygame.mixer.music.load(sound_path)
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
+        finally:
+            alarm_playing = False
+    alarm_playing = True
+    threading.Thread(target=play_all, daemon=True).start()
+
 ear_list=[]
 total_ear=[]
 mar_list=[]
@@ -148,8 +169,7 @@ while True:
 				count_sleep += 1
 				# Add the frame to the dataset ar a proof of drowsy driving
 				cv2.imwrite("dataset_phonecam/frame_sleep%d.jpg" % count_sleep, frame)
-				playsound('sound files/alarm.mp3')
-				playsound('sound files/warning.mp3')
+				play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.mp3')
 				cv2.putText(frame, "DROWSINESS ALERT!", (40, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 		else: 				
 			FRAME_COUNT = 0
@@ -160,8 +180,7 @@ while True:
 			cv2.drawContours(frame, [mouth], -1, (0, 0, 255), 1) 
 			cv2.putText(frame, "DROWSINESS ALERT!", (40, 400), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 			cv2.imwrite("dataset_phonecam/frame_yawn%d.jpg" % count_yawn, frame)
-			playsound('sound files/alarm.mp3')
-			playsound('sound files/warning_yawn.mp3')
+			play_warning_sounds('sound files/alarm.mp3', 'sound files/warning_yawn.mp3')
 	
 	# Cell phone detection code
 	height, width, _ = frame.shape
@@ -207,7 +226,7 @@ while True:
 				mobile_usage_count += 1
                 # Add the frame to the dataset ar a proof of mobile usage
 				cv2.imwrite("dataset_phonecam/frame_mobile_usage%d.jpg" % mobile_usage_count, frame)
-				playsound('sound files/mobwarn.mp3')
+				play_warning_sounds('sound files/mobwarn.mp3')
 
 	#total data collection for plotting	
 	for i in ear_list:
