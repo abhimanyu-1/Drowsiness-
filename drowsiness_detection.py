@@ -3,11 +3,10 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from EAR_calculator import *
-from imutils import face_utils
 from imutils.video import VideoStream
 from matplotlib import style
 import imutils
-import dlib
+import mediapipe as mp
 import time
 import argparse
 import cv2
@@ -64,7 +63,7 @@ args = vars(ap.parse_args())
 EAR_THRESHOLD = 0.2
 CONSECUTIVE_FRAMES = 10
 RESPONSE_FRAMES = 100
-MAR_THRESHOLD = 20
+MAR_THRESHOLD = 0.6
 
 BLINK_COUNT = 0
 FRAME_COUNT = 0
@@ -75,12 +74,12 @@ unconscious_detected = False
 alarm_playing = False
 
 print("[INFO] Loading the predictor.....")
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(args["shape_predictor"])
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-(lstart, lend) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-(rstart, rend) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-(mstart, mend) = face_utils.FACIAL_LANDMARKS_IDXS["mouth"]
+LEFT_EYE_INDICES = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE_INDICES = [362, 385, 387, 263, 373, 380]
+MP_MAR_INDICES = [191, 13, 415, 312, 14, 324, 78, 308]
 
 print("[INFO] Loading Camera.....")
 vs = VideoStream(usePiCamera=args["picamera"] > 0).start()
@@ -107,23 +106,25 @@ while True:
         continue
 
     cv2.putText(frame, "PRESS 'Q' TO EXIT", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 3)
-    frame = imutils.resize(frame, width=450)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frame = imutils.resize(frame, width=640)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    print("DEBUG FRAME:", type(rgb), rgb.shape, rgb.dtype)
-    rects = detector(rgb, 1)
+    results = face_mesh.process(rgb)
 
-    for (i, rect) in enumerate(rects):
-        shape = predictor(gray, rect)
-        shape = face_utils.shape_to_np(shape)
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            h_frame, w_frame, _ = frame.shape
+            shape = np.array([[int(pt.x * w_frame), int(pt.y * h_frame)] for pt in face_landmarks.landmark])
 
-        (x, y, w, h) = face_utils.rect_to_bb(rect)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(frame, "Driver", (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            x_min = np.min(shape[:, 0])
+            y_min = np.min(shape[:, 1])
+            x_max = np.max(shape[:, 0])
+            y_max = np.max(shape[:, 1])
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+            cv2.putText(frame, "Driver", (x_min - 10, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        leftEye = shape[lstart:lend]
-        rightEye = shape[rstart:rend]
-        mouth = shape[mstart:mend]
+            leftEye = shape[LEFT_EYE_INDICES]
+            rightEye = shape[RIGHT_EYE_INDICES]
+            mouth = shape[MP_MAR_INDICES]
 
         leftEAR = eye_aspect_ratio(leftEye)
         rightEAR = eye_aspect_ratio(rightEye)
@@ -137,8 +138,8 @@ while True:
         cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
         cv2.drawContours(frame, [mouth], -1, (0, 255, 0), 1)
 
-        MAR = mouth_aspect_ratio(mouth)
-        mar_list.append(MAR / 10)
+        MAR = mp_mouth_aspect_ratio(mouth)
+        mar_list.append(MAR)
 
         # --- DROWSINESS CHECK (EYES) ---
         if EAR < EAR_THRESHOLD:

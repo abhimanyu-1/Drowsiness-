@@ -21,3 +21,18 @@ def mouth_aspect_ratio(mouth):
 
 	MAR = (A + B + C) / 3.0
 	return MAR
+
+def mp_mouth_aspect_ratio(mouth): 
+	# For mediapipe, we pass an 8-element array containing the inner lip points directly
+	A = dist.euclidean(mouth[0], mouth[5])
+	B = dist.euclidean(mouth[1], mouth[4])
+	C = dist.euclidean(mouth[2], mouth[3])
+	# Horizontal distance
+	D = dist.euclidean(mouth[6], mouth[7])
+	
+	if D == 0:
+		D = 1
+	
+	# Normalize MAR (returns pure ratio, yawning is typically > 0.6)
+	MAR = (A + B + C) / (3.0 * D)
+	return MAR

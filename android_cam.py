@@ -5,10 +5,9 @@ import requests
 import numpy as np
 from EAR_calculator import *
 
-from imutils import face_utils 
 from imutils.video import VideoStream 
 import imutils 
-import dlib
+import mediapipe as mp
 import time 
 import argparse 
 import cv2 
@@ -67,7 +66,7 @@ EAR_THRESHOLD = 0.2
 # Declare another costant to hold the consecutive number of frames to consider for a blink 
 CONSECUTIVE_FRAMES = 5
 # Another constant which will work as a threshold for MAR value
-MAR_THRESHOLD = 14
+MAR_THRESHOLD = 0.6
 
 # Initialize two counters 
 BLINK_COUNT = 0 
@@ -75,15 +74,14 @@ FRAME_COUNT = 0
 # initialize moble use count
 mobile_usage_count = 0
 
-# Now, intialize the dlib's face detector model as 'detector' and the landmark predictor model as 'predictor'
+# Now, intialize the mediapipe face mesh
 print("[INFO]Loading the predictor.....")
-detector = dlib.get_frontal_face_detector() 
-predictor = dlib.shape_predictor(args["shape_predictor"])
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-# Grab the indexes of the facial landamarks for the left and right eye respectively 
-(lstart, lend) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-(rstart, rend) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
-(mstart, mend) = face_utils.FACIAL_LANDMARKS_IDXS["mouth"]
+LEFT_EYE_INDICES = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE_INDICES = [362, 385, 387, 263, 373, 380]
+MP_MAR_INDICES = [191, 13, 415, 312, 14, 324, 78, 308]
 
 # Now start the video stream and allow the camera to warm-up
 print("[INFO]Loading Camera.....")
@@ -117,25 +115,26 @@ while True:
 	frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 	cv2.putText(frame, "PRESS 'q' TO EXIT", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 3) 
 
-	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-	# Detect faces 
-	rects = detector(frame, 1)
+	rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+	results = face_mesh.process(rgb)
 
-	# Now loop over all the face detections and apply the predictor 
-	for (i, rect) in enumerate(rects): 
-		shape = predictor(gray, rect)
-		# Convert it to a (68, 2) size numpy array 
-		shape = face_utils.shape_to_np(shape)
+	# Now loop over all the face detections
+	if results.multi_face_landmarks:
+		for face_landmarks in results.multi_face_landmarks:
+			h_frame, w_frame, _ = frame.shape
+			shape = np.array([[int(pt.x * w_frame), int(pt.y * h_frame)] for pt in face_landmarks.landmark])
 
-		# Draw a rectangle over the detected face 
-		(x, y, w, h) = face_utils.rect_to_bb(rect) 
-		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)	
-		# Put a number 
-		cv2.putText(frame, "Driver", (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+			x_min = np.min(shape[:, 0])
+			y_min = np.min(shape[:, 1])
+			x_max = np.max(shape[:, 0])
+			y_max = np.max(shape[:, 1])
+			cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)	
+			# Put a number 
+			cv2.putText(frame, "Driver", (x_min - 10, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-		leftEye = shape[lstart:lend]
-		rightEye = shape[rstart:rend] 
-		mouth = shape[mstart:mend]
+			leftEye = shape[LEFT_EYE_INDICES]
+			rightEye = shape[RIGHT_EYE_INDICES] 
+			mouth = shape[MP_MAR_INDICES]
 		# Compute the EAR for both the eyes 
 		leftEAR = eye_aspect_ratio(leftEye)
 		rightEAR = eye_aspect_ratio(rightEye)
@@ -154,9 +153,9 @@ while True:
 		cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
 		cv2.drawContours(frame, [mouth], -1, (0, 255, 0), 1)
 
-		MAR = mouth_aspect_ratio(mouth)
+		MAR = mp_mouth_aspect_ratio(mouth)
 
-		mar_list.append(MAR/10)
+		mar_list.append(MAR)
 		# Check if EAR < EAR_THRESHOLD, if so then it indicates that a blink is taking place 
 		# Thus, count the number of frames for which the eye remains closed 
 		if EAR < EAR_THRESHOLD: 
