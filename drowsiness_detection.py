@@ -9,6 +9,9 @@ import imutils
 import mediapipe as mp
 import time
 import argparse
+import os
+# Fix for Raspberry Pi Wayland GUI crash
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2
 import pygame
 import time
