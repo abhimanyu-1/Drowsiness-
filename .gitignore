@@ -1,0 +1,30 @@
+# Virtual Environment (Contains thousands of files, NEVER upload this)
+myenv/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Machine Learning Models & Weights (These are massive and cause timeouts!)
+dnn_model/
+shape_predictor_68_face_landmarks.*
+*.dat
+*.h5
+*.pt
+*.pb
+
+# Datasets / Images / Videos
+dataset/
+dataset_phonecam/
+
+# CSV Output/Data Logs
+op_phonecam.csv
+op_webcam.csv
+*.csv
+
+# IDE Settings
+.vscode/
+
+# Audio files (Uncomment the line below if you want to ignore sound files too)
+# sound files/myenv/
+shape_predictor_68_face_landmarks*
