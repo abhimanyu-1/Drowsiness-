@@ -28,3 +28,4 @@ op_webcam.csv
 # Audio files (Uncomment the line below if you want to ignore sound files too)
 # sound files/myenv/
 shape_predictor_68_face_landmarks*
+/Python-3.11.5/
