@@ -23,6 +23,28 @@ import pandas as pd
 import threading
 
 # ==========================================================
+# TWILIO SMS SETUP
+# ==========================================================
+try:
+    from twilio.rest import Client as TwilioClient
+    TWILIO_ACCOUNT_SID = 'YOUR_ACCOUNT_SID'       # Replace with your Twilio SID
+    TWILIO_AUTH_TOKEN  = 'YOUR_AUTH_TOKEN'         # Replace with your Twilio Auth Token
+    TWILIO_FROM_NUMBER = '+1XXXXXXXXXX'            # Your Twilio phone number
+    ALERT_TO_NUMBER    = '+91XXXXXXXXXX'           # Recipient phone number (e.g. family/fleet manager)
+    twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    SMS_ENABLED = True
+    print("[INFO] Twilio SMS ready.")
+except Exception as e:
+    print(f"[WARN] Twilio not configured. SMS disabled. ({e})")
+    twilio_client = None
+    SMS_ENABLED = False
+
+sms_sent_flags = {
+    'drowsiness': False,  # Reset each session
+    'high_temp':  False,
+}
+
+# ==========================================================
 # ARDUINO SERIAL SETUP
 # ==========================================================
 try:
@@ -49,6 +71,63 @@ def send_to_arduino(command: str):
             print(f"[WARN] Failed to send to Arduino: {e}")
     else:
         print(f"[SIM] Arduino command: '{command}'")
+
+# ==========================================================
+# SMS ALERT FUNCTION
+# ==========================================================
+def send_sms(reason: str):
+    """Send an SMS alert using Twilio. 'reason' is 'drowsiness' or 'high_temp'."""
+    if not SMS_ENABLED:
+        print(f"[SIM] SMS would be sent for reason: {reason}")
+        return
+    if sms_sent_flags.get(reason):
+        return  # Avoid duplicate SMS for the same event
+
+    messages = {
+        'drowsiness': (
+            "DRIVER ALERT: The driver has been detected drowsy multiple times. "
+            "The vehicle is being automatically parked safely at the side of the road. "
+            "Please assist the driver immediately."
+        ),
+        'high_temp': (
+            "VEHICLE ALERT: The vehicle's engine temperature is critically high. "
+            "The vehicle has been stopped for safety. "
+            "Please check the engine and assist immediately."
+        ),
+    }
+
+    def _send():
+        try:
+            twilio_client.messages.create(
+                body=messages[reason],
+                from_=TWILIO_FROM_NUMBER,
+                to=ALERT_TO_NUMBER
+            )
+            sms_sent_flags[reason] = True
+            print(f"[SMS] Alert sent successfully for: {reason}")
+        except Exception as e:
+            print(f"[WARN] SMS failed to send: {e}")
+
+    threading.Thread(target=_send, daemon=True).start()
+
+# ==========================================================
+# ARDUINO INCOMING SERIAL READER (catches 'H' = High Temp)
+# ==========================================================
+def arduino_reader_thread():
+    """Background thread: reads incoming serial data from Arduino.
+       Triggers SMS if high temperature signal 'H' is received."""
+    while True:
+        try:
+            if HARDWARE_CONNECTED and arduino and arduino.is_open and arduino.in_waiting > 0:
+                incoming = arduino.read(arduino.in_waiting).decode('utf-8', errors='ignore')
+                if 'H' in incoming:
+                    print("[ARDUINO] High temperature signal received!")
+                    send_sms('high_temp')
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+threading.Thread(target=arduino_reader_thread, daemon=True).start()
 
 style.use('fivethirtyeight')
 
@@ -198,6 +277,8 @@ while True:
                     print(f"[EMERGENCY] Drowsiness detected {count_sleep} times! Triggering PARKING MODE.")
                     send_to_arduino('P')
                     unconscious_detected = True  # Prevent 'R' resume signal
+                    # === SEND SMS ALERT to family / fleet manager ===
+                    send_sms('drowsiness')
                 else:
                     # === 1st DROWSINESS: Warn and stop temporarily ===
                     print(f"[INFO] Drowsiness detected (count: {count_sleep}). Waiting for driver response.")
