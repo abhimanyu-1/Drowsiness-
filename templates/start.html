@@ -139,6 +139,51 @@
             stroke-width: 2;
         }
 
+        .file-upload-wrapper {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-input {
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .file-upload-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 1;
+        }
+
+        .file-upload-input:hover + .file-upload-label {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.8);
+            color: white;
+        }
+
+        .file-upload-icon {
+            width: 32px;
+            height: 32px;
+            margin-bottom: 8px;
+            stroke-width: 1.5;
+        }
+
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -200,7 +245,7 @@
             <p>Choose your monitoring source</p>
         </div>
         
-        <form method="POST" class="button-container">
+        <form method="POST" class="button-container" enctype="multipart/form-data">
             <button type="submit" name="StartWebCam" value="StartWebCam" class="btn btn-webcam">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -215,7 +260,33 @@
                 </svg>
                 Run using Phone Cam
             </button>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 16px; margin-top: 10px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);">
+                <h3 style="color: white; margin-bottom: 15px; font-weight: 600;">Lane Detection</h3>
+                <div class="file-upload-wrapper">
+                    <input type="file" name="video" accept="video/*" class="file-upload-input" onchange="updateFileName(this)">
+                    <div class="file-upload-label">
+                        <svg class="file-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 002-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                        <span id="file-upload-text">Click to choose a video file</span>
+                    </div>
+                </div>
+                <button type="submit" name="LaneDetection" value="LaneDetection" class="btn btn-phone" style="width: 100%;">
+                    Upload & Detect Lane
+                </button>
+            </div>
         </form>
     </div>
+    <script>
+        function updateFileName(input) {
+            const label = document.getElementById('file-upload-text');
+            if (input.files && input.files.length > 0) {
+                label.textContent = input.files[0].name;
+            } else {
+                label.textContent = 'Click to choose a video file';
+            }
+        }
+    </script>
 </body>
 </html>

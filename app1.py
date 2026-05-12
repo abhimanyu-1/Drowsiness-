@@ -3,7 +3,12 @@ from flask import Flask,redirect, url_for,render_template,request
 import os
 from index import d_dtcn
 import sys
+from werkzeug.utils import secure_filename
+import subprocess
 
+UPLOAD_FOLDER = 'uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 secret_key = str(os.urandom(24))
 
 python_exe = sys.executable
@@ -35,6 +40,18 @@ def start_detection():
         # Run Phone Cam script
         elif request.form.get('StartPhoneCam') == 'StartPhoneCam':
             os.system(f'"{python_exe}" android_cam.py --shape_predictor shape_predictor_68_face_landmarks.dat')
+        # Run Lane Detection
+        elif request.form.get('LaneDetection') == 'LaneDetection':
+            if 'video' in request.files:
+                file = request.files['video']
+                if file.filename != '':
+                    filename = secure_filename(file.filename)
+                    filepath = os.path.abspath(os.path.join(UPLOAD_FOLDER, filename))
+                    file.save(filepath)
+                    subprocess.run([python_exe, "lane_detection.py", 
+                                    "--video", filepath,
+                                    "--model_cfg", "dnn_model/yolov4-tiny.cfg",
+                                    "--model_weights", "dnn_model/yolov4-tiny.weights"])
     return render_template("start.html")
 
 @app.route('/contact', methods=['GET', 'POST'])

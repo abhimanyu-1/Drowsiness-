@@ -29,3 +29,5 @@ op_webcam.csv
 # sound files/myenv/
 shape_predictor_68_face_landmarks*
 /Python-3.11.5/
+
+/uploads/
