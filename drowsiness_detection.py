@@ -31,8 +31,8 @@ import requests as _requests
 #  1. Open Telegram → search @BotFather → send /newbot → follow steps → copy the TOKEN
 #  2. Add the bot to a group OR send it /start in a private chat
 #  3. Visit https://api.telegram.org/bot<TOKEN>/getUpdates to find your CHAT_ID
-TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN'   # e.g. '7123456789:AAFxxxxxxxxxxxxx'
-TELEGRAM_CHAT_ID   = 'YOUR_CHAT_ID'     # e.g. '123456789' (personal) or '-100xxxxxxxxx' (group)
+TELEGRAM_BOT_TOKEN = '8942685659:AAHZvBUzb0pMg57cZKoswAHAz3Wbi5NN3Yc'   # e.g. '7123456789:AAFxxxxxxxxxxxxx'
+TELEGRAM_CHAT_ID   = '603120597'     # e.g. '123456789' (personal) or '-100xxxxxxxxx' (group)
 
 TELEGRAM_ENABLED = (TELEGRAM_BOT_TOKEN != 'YOUR_BOT_TOKEN')
 if TELEGRAM_ENABLED:
@@ -41,8 +41,10 @@ else:
     print("[WARN] Telegram not configured. Alerts will be simulated.")
 
 alert_sent_flags = {
-    'drowsiness': False,  # Reset each session
-    'high_temp':  False,
+    'first_warning' : False,  # 1st drowsiness warning
+    'parking'       : False,  # 2nd detection - car parked
+    'yawn'          : False,  # Repeated yawning
+    'high_temp'     : False,  # High temperature
 }
 
 # ==========================================================
@@ -82,11 +84,23 @@ def send_telegram_alert(reason: str):
         return  # Avoid duplicate alerts for the same event
 
     messages = {
-        'drowsiness': (
-            "\u26a0\ufe0f *DROWSINESS ALERT*\n"
-            "The driver has been detected drowsy multiple times.\n"
-            "The vehicle is being *automatically parked* safely at the side of the road.\n"
+        'first_warning': (
+            "\u26a0\ufe0f *DROWSINESS WARNING*\n"
+            "The driver is showing signs of drowsiness (eyes closed).\n"
+            "The vehicle has been *temporarily stopped*.\n"
+            "Please wake up and respond!"
+        ),
+        'parking': (
+            "\U0001f6d1 *EMERGENCY: DRIVER UNRESPONSIVE*\n"
+            "The driver has been detected drowsy *multiple times*.\n"
+            "The vehicle is being *automatically parked* at the side of the road.\n"
             "Please assist the driver immediately!"
+        ),
+        'yawn': (
+            "\U0001f62a *YAWNING ALERT*\n"
+            "The driver has yawned repeatedly — signs of fatigue detected.\n"
+            "The vehicle has been *slowed and warned*.\n"
+            "Please take a break!"
         ),
         'high_temp': (
             "\U0001f321\ufe0f *HIGH TEMPERATURE ALERT*\n"
@@ -196,6 +210,7 @@ response_count = 0
 alarm_started = False
 unconscious_detected = False
 alarm_playing = False
+yawn_alarm_active = False   # True while mouth is open (prevents per-frame counting)
 
 print("[INFO] Loading the predictor.....")
 mp_face_mesh = mp.solutions.face_mesh
@@ -285,12 +300,12 @@ while True:
                     print(f"[EMERGENCY] Drowsiness detected {count_sleep} times! Triggering PARKING MODE.")
                     send_to_arduino('P')
                     unconscious_detected = True  # Prevent 'R' resume signal
-                    # === SEND TELEGRAM ALERT to family / fleet manager ===
-                    send_telegram_alert('drowsiness')
+                    send_telegram_alert('parking')       # ← Alert: car being parked
                 else:
                     # === 1st DROWSINESS: Warn and stop temporarily ===
                     print(f"[INFO] Drowsiness detected (count: {count_sleep}). Waiting for driver response.")
                     send_to_arduino('S')
+                    send_telegram_alert('first_warning') # ← Alert: first warning
 
             if alarm_started:
                 response_count += 1
@@ -319,16 +334,23 @@ while True:
 
         # --- YAWN CHECK ---
         if MAR > MAR_THRESHOLD:
-            count_yawn += 1
+            if not yawn_alarm_active:
+                count_yawn += 1
+                yawn_alarm_active = True
+                cv2.drawContours(frame, [mouth], -1, (0, 0, 255), 1)
+                cv2.putText(frame, "DROWSINESS ALERT! (YAWN)", (60, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.imwrite("dataset/frame_yawn%d.jpg" % count_yawn, frame)
+                play_warning_sounds('sound files/alarm.mp3', 'sound files/warning_yawn.mp3')
 
-            cv2.drawContours(frame, [mouth], -1, (0, 0, 255), 1)
-            cv2.putText(frame, "DROWSINESS ALERT! (YAWN)", (60, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.imwrite("dataset/frame_yawn%d.jpg" % count_yawn, frame)
-            play_warning_sounds('sound files/alarm.mp3', 'sound files/warning_yawn.mp3')
-            # === TRIGGER ARDUINO: Send 'S' on repeated yawning (warning) ===
-            if count_yawn % 3 == 0:  # Only trigger after every 3rd yawn to avoid spamming
-                print("[INFO] Repeated yawning detected. Sending sleep warning to Arduino.")
-                send_to_arduino('S')
+                if count_yawn >= 3:
+                    # After 3 yawns: stop the motor + send Telegram
+                    print(f"[INFO] {count_yawn} yawns detected. Stopping vehicle.")
+                    send_to_arduino('S')
+                    send_telegram_alert('yawn')
+                else:
+                    print(f"[INFO] Yawn #{count_yawn} detected. Warning driver.")
+        else:
+            yawn_alarm_active = False  # Reset when mouth closes
 
     # --- CELL PHONE DETECTION ---
     height, width, _ = frame.shape
