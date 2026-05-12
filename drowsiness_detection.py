@@ -23,23 +23,24 @@ import pandas as pd
 import threading
 
 # ==========================================================
-# TWILIO SMS SETUP
+# TELEGRAM ALERT SETUP
 # ==========================================================
-try:
-    from twilio.rest import Client as TwilioClient
-    TWILIO_ACCOUNT_SID = 'YOUR_ACCOUNT_SID'       # Replace with your Twilio SID
-    TWILIO_AUTH_TOKEN  = 'YOUR_AUTH_TOKEN'         # Replace with your Twilio Auth Token
-    TWILIO_FROM_NUMBER = '+1XXXXXXXXXX'            # Your Twilio phone number
-    ALERT_TO_NUMBER    = '+91XXXXXXXXXX'           # Recipient phone number (e.g. family/fleet manager)
-    twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    SMS_ENABLED = True
-    print("[INFO] Twilio SMS ready.")
-except Exception as e:
-    print(f"[WARN] Twilio not configured. SMS disabled. ({e})")
-    twilio_client = None
-    SMS_ENABLED = False
+import requests as _requests
 
-sms_sent_flags = {
+# Steps to get these values:
+#  1. Open Telegram → search @BotFather → send /newbot → follow steps → copy the TOKEN
+#  2. Add the bot to a group OR send it /start in a private chat
+#  3. Visit https://api.telegram.org/bot<TOKEN>/getUpdates to find your CHAT_ID
+TELEGRAM_BOT_TOKEN = 'YOUR_BOT_TOKEN'   # e.g. '7123456789:AAFxxxxxxxxxxxxx'
+TELEGRAM_CHAT_ID   = 'YOUR_CHAT_ID'     # e.g. '123456789' (personal) or '-100xxxxxxxxx' (group)
+
+TELEGRAM_ENABLED = (TELEGRAM_BOT_TOKEN != 'YOUR_BOT_TOKEN')
+if TELEGRAM_ENABLED:
+    print("[INFO] Telegram alerts ready.")
+else:
+    print("[WARN] Telegram not configured. Alerts will be simulated.")
+
+alert_sent_flags = {
     'drowsiness': False,  # Reset each session
     'high_temp':  False,
 }
@@ -73,40 +74,47 @@ def send_to_arduino(command: str):
         print(f"[SIM] Arduino command: '{command}'")
 
 # ==========================================================
-# SMS ALERT FUNCTION
+# TELEGRAM ALERT FUNCTION
 # ==========================================================
-def send_sms(reason: str):
-    """Send an SMS alert using Twilio. 'reason' is 'drowsiness' or 'high_temp'."""
-    if not SMS_ENABLED:
-        print(f"[SIM] SMS would be sent for reason: {reason}")
-        return
-    if sms_sent_flags.get(reason):
-        return  # Avoid duplicate SMS for the same event
+def send_telegram_alert(reason: str):
+    """Send a Telegram message alert. 'reason' is 'drowsiness' or 'high_temp'."""
+    if alert_sent_flags.get(reason):
+        return  # Avoid duplicate alerts for the same event
 
     messages = {
         'drowsiness': (
-            "DRIVER ALERT: The driver has been detected drowsy multiple times. "
-            "The vehicle is being automatically parked safely at the side of the road. "
-            "Please assist the driver immediately."
+            "\u26a0\ufe0f *DROWSINESS ALERT*\n"
+            "The driver has been detected drowsy multiple times.\n"
+            "The vehicle is being *automatically parked* safely at the side of the road.\n"
+            "Please assist the driver immediately!"
         ),
         'high_temp': (
-            "VEHICLE ALERT: The vehicle's engine temperature is critically high. "
-            "The vehicle has been stopped for safety. "
-            "Please check the engine and assist immediately."
+            "\U0001f321\ufe0f *HIGH TEMPERATURE ALERT*\n"
+            "The vehicle engine temperature is critically high.\n"
+            "The vehicle has been *stopped for safety*.\n"
+            "Please check the engine and assist immediately!"
         ),
     }
 
     def _send():
+        if not TELEGRAM_ENABLED:
+            print(f"[SIM] Telegram alert would be sent: {reason}")
+            return
         try:
-            twilio_client.messages.create(
-                body=messages[reason],
-                from_=TWILIO_FROM_NUMBER,
-                to=ALERT_TO_NUMBER
-            )
-            sms_sent_flags[reason] = True
-            print(f"[SMS] Alert sent successfully for: {reason}")
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            payload = {
+                'chat_id'    : TELEGRAM_CHAT_ID,
+                'text'       : messages[reason],
+                'parse_mode' : 'Markdown'
+            }
+            response = _requests.post(url, data=payload, timeout=10)
+            if response.status_code == 200:
+                alert_sent_flags[reason] = True
+                print(f"[TELEGRAM] Alert sent successfully for: {reason}")
+            else:
+                print(f"[WARN] Telegram API error {response.status_code}: {response.text}")
         except Exception as e:
-            print(f"[WARN] SMS failed to send: {e}")
+            print(f"[WARN] Telegram alert failed: {e}")
 
     threading.Thread(target=_send, daemon=True).start()
 
@@ -122,7 +130,7 @@ def arduino_reader_thread():
                 incoming = arduino.read(arduino.in_waiting).decode('utf-8', errors='ignore')
                 if 'H' in incoming:
                     print("[ARDUINO] High temperature signal received!")
-                    send_sms('high_temp')
+                    send_telegram_alert('high_temp')
         except Exception:
             pass
         time.sleep(0.5)
@@ -277,8 +285,8 @@ while True:
                     print(f"[EMERGENCY] Drowsiness detected {count_sleep} times! Triggering PARKING MODE.")
                     send_to_arduino('P')
                     unconscious_detected = True  # Prevent 'R' resume signal
-                    # === SEND SMS ALERT to family / fleet manager ===
-                    send_sms('drowsiness')
+                    # === SEND TELEGRAM ALERT to family / fleet manager ===
+                    send_telegram_alert('drowsiness')
                 else:
                     # === 1st DROWSINESS: Warn and stop temporarily ===
                     print(f"[INFO] Drowsiness detected (count: {count_sleep}). Waiting for driver response.")
