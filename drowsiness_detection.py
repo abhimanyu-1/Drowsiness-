@@ -190,11 +190,18 @@ while True:
                 cv2.putText(frame, "DROWSINESS ALERT! (EYES CLOSED)", (40, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 cv2.imwrite("dataset/frame_sleep%d.jpg" % count_sleep, frame)
                 play_warning_sounds('sound files/alarm.mp3', 'sound files/warning.wav')
-                print("[INFO] Drowsiness detected. Waiting for driver response.")
                 alarm_started = True
                 response_count = 0
-                # === TRIGGER ARDUINO: Send 'S' (SLEEP / STOP VEHICLE) ===
-                send_to_arduino('S')
+
+                if count_sleep >= 2:
+                    # === 2nd+ DROWSINESS: Escalate to PARKING MODE permanently ===
+                    print(f"[EMERGENCY] Drowsiness detected {count_sleep} times! Triggering PARKING MODE.")
+                    send_to_arduino('P')
+                    unconscious_detected = True  # Prevent 'R' resume signal
+                else:
+                    # === 1st DROWSINESS: Warn and stop temporarily ===
+                    print(f"[INFO] Drowsiness detected (count: {count_sleep}). Waiting for driver response.")
+                    send_to_arduino('S')
 
             if alarm_started:
                 response_count += 1

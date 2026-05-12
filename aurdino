@@ -1,0 +1,352 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+
+// ==========================================================
+// LCD SETUP
+// ==========================================================
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ==========================================================
+// DHT11 SETUP
+// ==========================================================
+#define DHTPIN 5
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
+
+// ==========================================================
+// SENSOR PINS
+// ==========================================================
+const int mq3Pin = 34;
+const int seatBeltPin = 14;
+
+// ==========================================================
+// LED PINS
+// ==========================================================
+const int indicatorLED = 15;
+const int headlightLED = 2;
+const int brakeLED = 25;
+const int leftIndicator = 26;
+
+// ==========================================================
+// BUZZER PIN
+// ==========================================================
+const int buzzer = 4;
+
+// ==========================================================
+// MOTOR PINS
+// ==========================================================
+
+// Left Motor
+const int motor1A = 18;
+const int motor1B = 19;
+
+// Right Motor
+const int motor2A = 27;
+const int motor2B = 33;
+
+// ==========================================================
+// VARIABLES
+// ==========================================================
+int alcoholThreshold = 2000;
+
+char serialData = 'R';
+
+// Parking flag
+bool parkingActive = false;
+
+// Drowsiness detection counter
+int drowsinessCount = 0;
+
+// ==========================================================
+// BUZZER FUNCTIONS
+// ==========================================================
+
+// Buzzer ON — uses tone() for passive buzzer compatibility
+void playTone()
+{
+  tone(buzzer, 1000);  // 1000 Hz alert tone
+}
+
+// Buzzer OFF
+void stopTone()
+{
+  noTone(buzzer);
+}
+
+// ==========================================================
+// MOTOR FUNCTIONS
+// ==========================================================
+
+// Move FORWARD
+void moveForward()
+{
+  digitalWrite(motor1A, HIGH);
+  digitalWrite(motor1B, LOW);
+
+  digitalWrite(motor2A, HIGH);
+  digitalWrite(motor2B, LOW);
+}
+
+// Stop motors
+void stopMotor()
+{
+  digitalWrite(motor1A, LOW);
+  digitalWrite(motor1B, LOW);
+
+  digitalWrite(motor2A, LOW);
+  digitalWrite(motor2B, LOW);
+}
+
+// Turn LEFT
+void turnLeft()
+{
+  // Left motor STOP
+  digitalWrite(motor1A, LOW);
+  digitalWrite(motor1B, LOW);
+
+  // Right motor FORWARD
+  digitalWrite(motor2A, HIGH);
+  digitalWrite(motor2B, LOW);
+}
+
+// ==========================================================
+// STOP VEHICLE FUNCTION
+// ==========================================================
+
+void stopVehicle(const char* line1, const char* line2)
+{
+  stopMotor();
+
+  digitalWrite(brakeLED, HIGH);
+
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+
+  lcd.setCursor(0, 1);
+  lcd.print(line2);
+
+  // Hazard blink + buzzer alert (10 beeps)
+  for (int i = 0; i < 10; i++)
+  {
+    digitalWrite(indicatorLED, HIGH);
+    tone(buzzer, 1000);   // 1000 Hz beep ON
+    delay(300);
+    digitalWrite(indicatorLED, LOW);
+    noTone(buzzer);       // beep OFF
+    delay(200);
+  }
+
+  // Keep a continuous slower beep while vehicle is still stopped
+  tone(buzzer, 800);  // Lower tone to signal idle stop state
+}
+
+// ==========================================================
+// PARKING MODE
+// ==========================================================
+
+void parkingMode()
+{
+  parkingActive = true;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("PARKING MODE");
+  lcd.setCursor(0, 1);
+  lcd.print("TURN LEFT");
+
+  // STEP 1 : BRAKE LIGHT ON
+  digitalWrite(brakeLED, HIGH);
+  delay(1000);
+
+  // STEP 2 : LEFT INDICATOR BLINK
+  for (int i = 0; i < 6; i++)
+  {
+    digitalWrite(leftIndicator, HIGH);
+    delay(300);
+    digitalWrite(leftIndicator, LOW);
+    delay(300);
+  }
+
+  // STEP 3 : TURN LEFT
+  digitalWrite(leftIndicator, HIGH);
+  turnLeft();
+  delay(2000);
+  digitalWrite(leftIndicator, LOW);
+
+  // STEP 4 : MOVE FORWARD
+  moveForward();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("MOVING");
+  lcd.setCursor(0, 1);
+  lcd.print("FORWARD");
+  delay(3000);
+
+  // STEP 5 : STOP VEHICLE
+  stopMotor();
+  digitalWrite(brakeLED, HIGH);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("VEHICLE");
+  lcd.setCursor(0, 1);
+  lcd.print("PARKED");
+
+  serialData = 'X';
+}
+
+// ==========================================================
+// RESUME MODE
+// ==========================================================
+
+void resumeMode()
+{
+  parkingActive = false;
+  digitalWrite(brakeLED, LOW);
+  digitalWrite(leftIndicator, LOW);
+  digitalWrite(indicatorLED, LOW);
+  stopTone();
+  moveForward();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("RUN MODE");
+  lcd.setCursor(0, 1);
+  lcd.print("MOVING");
+  delay(1000);
+}
+
+// ==========================================================
+// SETUP
+// ==========================================================
+void setup()
+{
+  Serial.begin(115200);
+
+  Wire.begin(21, 22);
+
+  pinMode(seatBeltPin, INPUT);
+
+  pinMode(indicatorLED, OUTPUT);
+  pinMode(headlightLED, OUTPUT);
+  pinMode(brakeLED, OUTPUT);
+  pinMode(leftIndicator, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+
+  pinMode(motor1A, OUTPUT);
+  pinMode(motor1B, OUTPUT);
+  pinMode(motor2A, OUTPUT);
+  pinMode(motor2B, OUTPUT);
+
+  digitalWrite(headlightLED, HIGH);
+
+  lcd.init();
+  lcd.backlight();
+
+  dht.begin();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("SMART VEHICLE");
+  lcd.setCursor(0, 1);
+  lcd.print("INITIALIZING");
+  delay(2000);
+}
+
+// ==========================================================
+// MAIN LOOP
+// ==========================================================
+void loop()
+{
+  if (Serial.available())
+  {
+    serialData = Serial.read();
+  }
+
+  int alcohol = analogRead(mq3Pin);
+  int seatBelt = digitalRead(seatBeltPin);
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+
+  if (serialData == 'R' && parkingActive == true)
+  {
+    resumeMode();
+    drowsinessCount = 0;  // Reset counter on full resume
+    serialData = 'O';
+  }
+  else if (temp > 35)
+  {
+    Serial.write('H');
+    stopVehicle("HIGH TEMP!", "STOP VEHICLE");
+  }
+  else if (serialData == 'S')
+  {
+    drowsinessCount++;
+    Serial.print("[ARDUINO] Drowsiness count: ");
+    Serial.println(drowsinessCount);
+
+    if (drowsinessCount >= 2)
+    {
+      // 2nd+ detection: permanently park the vehicle
+      Serial.println("[ARDUINO] 2nd drowsiness! Triggering PARKING MODE.");
+      serialData = 'O';  // Prevent re-entry
+      parkingMode();
+    }
+    else
+    {
+      // 1st detection: warn and stop temporarily
+      stopVehicle("DONT SLEEP!", "STOP VEHICLE");
+    }
+  }
+  else if (alcohol > alcoholThreshold)
+  {
+    stopVehicle("ALCOHOL FOUND", "STOP VEHICLE");
+  }
+  else if (seatBelt == 0)
+  {
+    stopVehicle("WEAR SEATBELT", "STOP VEHICLE");
+  }
+  else if (serialData == 'P')
+  {
+    parkingMode();
+  }
+  else
+  {
+    Serial.write('h');
+
+    if (parkingActive == false)
+    {
+      digitalWrite(brakeLED, LOW);
+      digitalWrite(indicatorLED, LOW);
+      digitalWrite(leftIndicator, LOW);
+      stopTone();
+      moveForward();
+    }
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("T:");
+    lcd.print(temp);
+    lcd.print("C ");
+    lcd.print("H:");
+    lcd.print(hum);
+    lcd.setCursor(0, 1);
+    lcd.print("VEHICLE READY");
+  }
+
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print("C  Humidity: ");
+  Serial.print(hum);
+  Serial.print("%  Alcohol: ");
+  Serial.print(alcohol);
+  Serial.print("  SeatBelt: ");
+  Serial.print(seatBelt);
+  Serial.print("  Serial: ");
+  Serial.println(serialData);
+
+  delay(500);
+}
