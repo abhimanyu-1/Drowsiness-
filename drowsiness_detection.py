@@ -28,7 +28,7 @@ import threading
 try:
     import serial
     # Change 'COM7' to the correct port (e.g., 'COM3', 'COM7' on Windows or '/dev/ttyUSB0' on Raspberry Pi)
-    ARDUINO_PORT = 'COM7'
+    ARDUINO_PORT = '/dev/ttyUSB0' if platform.system() != "Windows" else 'COM7'
     BAUD_RATE = 115200
     arduino = serial.Serial(ARDUINO_PORT, BAUD_RATE, timeout=1)
     time.sleep(2)  # Wait for Arduino to reboot after connection
