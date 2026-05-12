@@ -16,7 +16,9 @@ numpy>=1.22.0,<2.0.0
 opencv-python>=4.3.0.36
 pandas>=1.0.5
 Pillow>=9.3.0
-playsound==1.2.2
+pygame>=2.6.0
+mediapipe==0.10.11
+pyserial>=3.5
 PyAutoGUI>=0.9.50
 PyGetWindow>=0.0.8
 PyMsgBox>=1.0.8
@@ -35,4 +37,4 @@ urllib3>=1.25.10
 Werkzeug>=1.0.1
 wincertstore>=0.2
 zope.interface>=5.1.0
-dlib
+

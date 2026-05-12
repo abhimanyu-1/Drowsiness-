@@ -22,7 +22,33 @@ import numpy as np
 import pandas as pd
 import threading
 
-#updated
+# ==========================================================
+# ARDUINO SERIAL SETUP
+# ==========================================================
+try:
+    import serial
+    # Change 'COM7' to the correct port (e.g., 'COM3', 'COM7' on Windows or '/dev/ttyUSB0' on Raspberry Pi)
+    ARDUINO_PORT = 'COM7'
+    BAUD_RATE = 115200
+    arduino = serial.Serial(ARDUINO_PORT, BAUD_RATE, timeout=1)
+    time.sleep(2)  # Wait for Arduino to reboot after connection
+    print(f"[INFO] Arduino connected on {ARDUINO_PORT}")
+    HARDWARE_CONNECTED = True
+except Exception as e:
+    print(f"[WARN] Hardware NOT connected. Running in simulation mode. ({e})")
+    arduino = None
+    HARDWARE_CONNECTED = False
+
+def send_to_arduino(command: str):
+    """Send a single character command to the Arduino over Serial."""
+    if HARDWARE_CONNECTED and arduino and arduino.is_open:
+        try:
+            arduino.write(command.encode())
+            print(f"[ARDUINO] Sent: '{command}'")
+        except Exception as e:
+            print(f"[WARN] Failed to send to Arduino: {e}")
+    else:
+        print(f"[SIM] Arduino command: '{command}'")
 
 style.use('fivethirtyeight')
 
@@ -167,6 +193,8 @@ while True:
                 print("[INFO] Drowsiness detected. Waiting for driver response.")
                 alarm_started = True
                 response_count = 0
+                # === TRIGGER ARDUINO: Send 'S' (SLEEP / STOP VEHICLE) ===
+                send_to_arduino('S')
 
             if alarm_started:
                 response_count += 1
@@ -175,13 +203,19 @@ while True:
                 if response_count >= RESPONSE_FRAMES and not unconscious_detected:
                     unconscious_detected = True
                     print("[EMERGENCY] Possible unconscious driver detected.")
-                    print("[EMERGENCY] Slowing vehicle...")
-                    print("[EMERGENCY] Stopping vehicle...")
+                    print("[EMERGENCY] Triggering PARKING MODE on Arduino...")
+                    # === TRIGGER ARDUINO: Send 'P' (PARK VEHICLE) ===
+                    send_to_arduino('P')
 
                 if unconscious_detected:
-                    cv2.putText(frame, "UNCONSCIOUS DRIVER!", (55, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 3)
+                    cv2.putText(frame, "UNCONSCIOUS DRIVER! PARKING...", (55, 340), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 3)
 
         else:
+            # Driver eyes are open - recover if we were alarming
+            if alarm_started and not unconscious_detected:
+                print("[INFO] Driver responded. Resuming vehicle.")
+                # === TRIGGER ARDUINO: Send 'R' (RESUME / DRIVER AWAKE) ===
+                send_to_arduino('R')
             FRAME_COUNT = 0
             response_count = 0
             alarm_started = False
@@ -195,6 +229,10 @@ while True:
             cv2.putText(frame, "DROWSINESS ALERT! (YAWN)", (60, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.imwrite("dataset/frame_yawn%d.jpg" % count_yawn, frame)
             play_warning_sounds('sound files/alarm.mp3', 'sound files/warning_yawn.mp3')
+            # === TRIGGER ARDUINO: Send 'S' on repeated yawning (warning) ===
+            if count_yawn % 3 == 0:  # Only trigger after every 3rd yawn to avoid spamming
+                print("[INFO] Repeated yawning detected. Sending sleep warning to Arduino.")
+                send_to_arduino('S')
 
     # --- CELL PHONE DETECTION ---
     height, width, _ = frame.shape
